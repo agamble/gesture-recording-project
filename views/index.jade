@@ -1,0 +1,29 @@
+extends layout
+
+block content
+	h1= title
+	p Welcome to #{title}
+
+	button.button0 This is a test
+	button.button1  retest
+
+	script(src='/socket.io/socket.io.js')
+	script(src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js")
+	script(type='text/javascript').
+		var socket = io.connect('http://localhost');
+		$('.button0').click(function(){
+			socket.emit('startRecording', null);
+			setTimeout(function(){
+				socket.emit('stopRecording', null);
+				}, 5000)
+		})
+		socket.on('gesture', function(data){
+			$('body').append('There was another gesture. ')
+			})
+		
+		$('.button1').click(function(){
+			socket.emit('translate', null);
+			})
+
+
+		
