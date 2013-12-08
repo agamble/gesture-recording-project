@@ -3,433 +3,251 @@
  * Module dependencies.
  */
 
-var express = require('express');
-var routes = require('./routes');
-var user = require('./routes/user');
-var http = require('http');
-var path = require('path');
-var Leap = require('leapjs');
-var app = express();
+ var express = require('express');
+ var routes = require('./routes');
+ var user = require('./routes/user');
+ var http = require('http');
+ var path = require('path');
+ var app = express();
  var server = http.createServer(app);
  var io = require('socket.io').listen(server);
+ var webSocket = require('ws');
+ var ws = new webSocket('ws://127.0.0.1:6437', {log: false});
+ var fs = require('fs')
+ var applescript = require("applescript");
 
-var prevx=0;
-var prevy=0;
-var x;
-var y;
-var diffx=0;
-var diffy=0;
-var check=0;
-var z=0;
-var grad;
-var gradArray=new Array();
-var rEgradArray=new Array();
+ io.set('log level', 1);
 
-var type;
-var lineType = new Array();
-var rElineType = new Array();
 
- 
- var possibles;
- var frame;
- var recording = true;
- var connectedClientSocket = null;
- var gestures = new Array();
- var matchGesture = new Array();
-var webSocket = require('ws'),
-    ws = new webSocket('ws://127.0.0.1:6437'),
-   frame;
+ var PATH = path.resolve(__dirname, '') + "/";
+ console.log(PATH)
+
+ var raw_applications = fs.readdirSync('/Applications/')
+ var categories = fs.readdirSync(PATH + 'scripts/')
+ var applications = []
+ var scripts = {}
+
+ for (var i = categories.length - 1; i >= 0; i--) {
+  if (categories[i] !== ".DS_Store"){
+    var categoryScripts = fs.readdirSync(PATH + 'scripts/' + categories[i]);
+    scripts[categories[i]] = categoryScripts;
+  }
+}; 
+
+for ( var i = raw_applications.length - 1; i>=0; i--) {
+  var lastFour = raw_applications[i].substr(raw_applications[i].length - 4);
+
+  if (raw_applications[i] !== ".DS_Store" && lastFour == ".app") {
+    applications.push(raw_applications[i])
+  }
+}
 
 ws.onopen = function(event) {
-    var enableMessage = JSON.stringify({enableGestures: true});
-    ws.send(enableMessage); // Enable gestures
-  };
-
-   
-
-function startRecording(){
-  setTimeout(function(){
-    finishRecording();
-  }, 3000);
-
-   record();
-
+  var enableMessage = JSON.stringify({ enableGestures: true });
+  ws.send(enableMessage); 
 }
 
+// store the gestures unique names as keys within this object that relate to the gesture itself
+var GesturesObject = {};
+// store the gesture's unique names within an arrary for easier manipulation of things like 'length' etc.
+var GesturesNames = [];
 
-function finishRecording() {
-  
-   console.log("finishRecording");
-   
-   calculateGradient();
-   matchGradient();
-   for(var l=0; l<gradArray.length;l++){
-    console.log("*"+gradArray[l]);                           
-    check=0;
-   }
-   for(var l=0; l<lineType.length;l++){
-    console.log(lineType[l]);                           
-    check=0;
-   }
-   translate();
-  // calculateGradient();
-    gradArray=[];
-   gestures=[];
-    prevx=0;
-    prevy=0;
-    x;
-    y;
-    diffx=0;
-    diffy=0;
-    z=0;
-    
-}
+// this is the gesture object, it contains functions etc related to organising itself
+var Gesture = function(name) {
+  this.longGradientArray = [];
+  this.shortGradientArray = [];
+};
 
-
-function finish() {
-  
-  // console.log("finishRecording");
-   
-   calGradient();
-  matGradient();
-
-   for(var l=0; l<rEgradArray.length;l++){
-    console.log("*"+rEgradArray[l]);                           
-    check=0;
-   }
-   for(var l=0; l<rElineType.length;l++){
-    console.log(rElineType[l]);                           
-    check=0;
-   }
-    matchline();
-  // calculateGradient();
-    rEgradArray=[];
-   rEgestures=[];
-    prevx=0;
-    prevy=0;
-    x;
-    y;
-    diffx=0;
-    diffy=0;
-    z=0;
-    console.log("SAd");
-    
-}
-
-function matchline(){
-  var match=1;
-  console.log("matching....");
-  for(var t=0; t<lineType.length; t++){
-    console.log("ad");
-     if(lineType[t]==rElineType[t]&&match>0){
-      match=match+1;
-      console.log("ad");
-     }
-     else{
-      match=0;
-      console.log("ad");
-     }
+Gesture.prototype.createLongGradientArray = function() {
+  var longGradientArray = [];
+  for(var l = 1; l < this.rawCoords.length - 2; l++ ) {
+    var prevX = this.rawCoords[l-1][0];
+    var prevY = this.rawCoords[l-1][1];
+    var this_gradient = (this.rawCoords[l][1]-prevY) / (this.rawCoords[l][0]-prevX);
+    if (this_gradient >= 1) {
+      this.longGradientArray.push(1);
+    } else if (this_gradient < 1 && this_gradient > -1) {
+      this.longGradientArray.push(0);
+    } else if (this_gradient < -1) {
+      this.longGradientArray.push(-1);
+    }
   }
-
-  if (match>1){
-    console.log("matchfound!!!");
-  }
-
 }
 
+Gesture.prototype.matchLine = function(testArray){
+  if (this.shortGradientArray == testArray) {
+    return true;
+  } else {
+    return false;
+  }
+}
 
-
-  function calculateGradient(){
-    var xcord;
-    var ycord;
-    var prevxcord;
-    var prevycord;
-    var c=0;
-     
-    if (c==0){
-      
-        prevxcord=gestures[0][0];
-        prevycord=gestures[0][1];
-        c++;
-   }
-     if (c>0){
-       for(var l=1; l<gestures.length;l++){
-
-          grad=(gestures[l][1]-prevycord)/(gestures[l][0]-prevxcord);
-          //gradArray.push(grad);
-          console.log(grad);
-        prevxcord=gestures[l][0];
-        prevycord=gestures[l][1];
-
-        if (grad>=1){
-          type=1;
-          gradArray.push(type);
-
-        }
-       else if(grad<1&&grad>-1){
-          type=0;
-         gradArray.push(type);
-
+Gesture.prototype.createShortGradientArray = function() {
+  var current_state = 50;
+  var longGradArray = this.longGradientArray;
+  for (var i = 1; i < longGradArray.length - 2; i++) {
+    if ((longGradArray[i-1] == longGradArray[i]) && (longGradArray[i] == longGradArray[i+1])) {
+      if (current_state != longGradArray[i]) {
+        this.shortGradientArray.push(longGradArray[i])
+        current_state = longGradArray[i]
       }
+    }
+  }
+}
 
-      else if(grad<-1){
-          type=-1;
-         gradArray.push(type);
+function runapplescript(scriptname) {
+  var full_path = PATH + "scripts/" + scriptname;
+  applescript.execFile(full_path, function(err, rtn){
+    if (err) console.log(err)
+      console.log(rtn)
+  })
+}
 
+function killRecording() {
+  ws.onmessage = undefined;
+  ws.onmessage = function(event) {
+    connectedClientSocket.emit("frame", event.data);
+  }
+}
+
+function populateGesture(gesture) {
+  var gesture_name = gesture.name;
+
+  gesture.createLongGradientArray();
+  gesture.createShortGradientArray();
+  GesturesObject[gesture_name] = gesture;
+
+
+  console.log(gesture.shortGradientArray)
+  return gesture;
+}
+
+function populateGestureBetter(gesture) {
+
+  gesture.createLongGradientArray();
+  gesture.createShortGradientArray();
+  return gesture;
+}
+
+function startRecording(gestureName){
+  var gestureCoordsArray = [];
+  var frame_counter = 0;
+  ws.onmessage = function(event) {
+    frame = JSON.parse(event.data);
+    if ((frame.hands && frame.hands.length > 0 ) && (frame_counter % 3 == 0 && gestureCoordsArray.length < 60)){
+      if (frame.hands.length != 0){
+        var x = frame.hands[0].palmPosition[0];
+        var y = frame.hands[0].palmPosition[1];
+        gestureCoordsArray.push([x, y]);
+        connectedClientSocket.emit('frame', event.data)
+        connectedClientSocket.emit('gestureProgress', gestureCoordsArray.length)
       }
+    } else if (gestureCoordsArray.length == 60){
+        killRecording();
+        var this_gesture = new Gesture(gestureName);
+        this_gesture.rawCoords = gestureCoordsArray;
+        GesturesNames.push(gestureName);
+        populateGesture(this_gesture);
+        connectedClientSocket.emit('finishedRecording', gestureName)
+    }
+    frame_counter++;
+  }
+}
 
+var scriptFired = false;
+
+function arraysEqual(arr1, arr2) {
+    if(arr1.length !== arr2.length)
+        return false;
+    for(var i = arr1.length; i--;) {
+        if(arr1[i] !== arr2[i])
+            return false;
     }
 
-    }
-
-  }
-
-  function matchGradient(){
-     
-     var poscount=0;
-     var negcount=0;
-     var neutralcount=0;
-     var c1=0;
-     var c2=0;
-     var c3=0;
-     for(var l=0; l<gradArray.length;l++){
-       
-      if(gradArray[l]==1){
-        poscount=poscount+1;
-         //console.log("sAD");
-        if (poscount>1 && c1==0){
-
-          lineType.push(1);
-          console.log("1");
-          c1=1;
-          negcount=0;
-          neutralcount=0;
-           c3=0;
-           c2=0;
-        }
-          
-      }
-
-      if(gradArray[l]==-1){
-        negcount=negcount+1;
-        if (negcount>1&&c2==0){
-          lineType.push(-1);
-          console.log("-1");
-          c2=1;
-          poscount=0;
-        neutralcount=0;
-        c3=0;
-        c1=0;
-        }
-        
-
-      }
-
-      if(gradArray[l]==0){
-        neutralcount=neutralcount+1;
-        if (neutralcount>1&&c3==0){
-          lineType.push(0);
-          console.log("0");
-          c3=1;
-           negcount=0;
-        poscount=0;
-        c1=0;
-        c2=0;
-        }
-       
-
-      }
-    
-   }
-
-
-
-  }
-
-    
-
-  
-
- 
-
-  function record(){
-     ws.onmessage = function(event) {
-        //var enableMessage = JSON.stringify({enableGestures: true});
-    //ws.send(enableMessage); // Enable gestures
-    frame = JSON.parse(event.data); 
-
-      
-      if((frame.hands && frame.hands.length > 0 )&& z%10== 0&&z<270){
-       
-
-        //console.log("*"+frame.hands[0].palmPosition[0],frame.hands[0].palmPosition[1]);
-         if (check!=0){
-         var x= frame.hands[0].palmPosition[0];
-         var y= frame.hands[0].palmPosition[1];
-         diffx=(x-prevx)+diffx;
-         diffy=(y-prevy)+diffy;
-         console.log(diffx,diffy);
-         prevx=x;
-         prevy=y;
-         gestures.push([diffx,diffy]);
-         z++;
-         }
-         else{
-          check=1;
-          console.log("1"+frame.hands[0].palmPosition[0],frame.hands[0].palmPosition[1]);
-          var x= frame.hands[0].palmPosition[0];
-         var y= frame.hands[0].palmPosition[1];
-         gestures.push([0,0]);
-         prevx=x;
-         prevy=y;
-         }
-     
-      }
-      z++;
-     };
-  }
-  
- function translate(){
-
-   setTimeout(function(){
-    finish();
-  }, 3000);
-
-   record();
-
+    return true;
 }
 
-function calGradient(){
-    var xcord;
-    var ycord;
-    var prevxcord;
-    var prevycord;
-    var c=0;
-     
-    if (c==0){
-      
-        prevxcord=gestures[0][0];
-        prevycord=gestures[0][1];
-        c++;
-   }
-     if (c>0){
-       for(var l=1; l<gestures.length;l++){
 
-          grad=(gestures[l][1]-prevycord)/(gestures[l][0]-prevxcord);
-          //gradArray.push(grad);
-          console.log(grad);
-        prevxcord=gestures[l][0];
-        prevycord=gestures[l][1];
-
-        if (grad>=1){
-          type=1;
-          rEgradArray.push(type);
-
-        }
-       else if(grad<1&&grad>-1){
-          type=0;
-         rEgradArray.push(type);
-
-      }
-
-      else if(grad<-1){
-          type=-1;
-         rEgradArray.push(type);
-
-      }
-
+function compareGesture(gesture) {
+  for (var i = 0; i < GesturesNames.length; i++) {
+    console.log(GesturesObject[GesturesNames[i]].shortGradientArray)
+    console.log(gesture.shortGradientArray)
+    if (arraysEqual(GesturesObject[GesturesNames[i]].shortGradientArray, gesture.shortGradientArray)&& !scriptFired) {
+      runapplescript(GesturesObject[GesturesNames[i]].scriptPath)
+      scriptFired = true;
     }
+  }
+}
 
+
+function detectSegments(frame) {
+  var gestureCoordsArray = [];
+  var frame_counter = 0;
+
+  ws.onmessage = function(event) {
+    frame = JSON.parse(event.data);
+    connectedClientSocket.emit('frame', event.data)
+
+    if ((frame.hands && frame.hands.length > 0 ) && (frame_counter % 1 == 0 && gestureCoordsArray.length < 60)){
+      if (frame.hands.length != 0){
+        var x = frame.hands[0].palmPosition[0];
+        var y = frame.hands[0].palmPosition[1];
+        gestureCoordsArray.push([x, y]);
+      }
+    } else if (gestureCoordsArray.length == 60){
+      var this_gesture = new Gesture();
+      this_gesture.rawCoords = gestureCoordsArray;
+      compareGesture(populateGestureBetter(this_gesture));
     }
-
+    if (frame.hands.length == 0) {
+      gestureCoordsArray = [];
+      frame_counter = 0;
+      scriptFired = false;
+    }
   }
+}
 
-  function matGradient(){
-     
-     var poscount=0;
-     var negcount=0;
-     var neutralcount=0;
-     var c1=0;
-     var c2=0;
-     var c3=0;
-     for(var l=0; l<rEgradArray.length;l++){
-       
-      if(rEgradArray[l]==1){
-        poscount=poscount+1;
-         //console.log("sAD");
-        if (poscount>1 && c1==0){
-
-          rElineType.push(1);
-          console.log("1");
-          c1=1;
-          negcount=0;
-          neutralcount=0;
-           c3=0;
-           c2=0;
-        }
-          
-      }
-
-      if(rEgradArray[l]==-1){
-        negcount=negcount+1;
-        if (negcount>1&&c2==0){
-          rElineType.push(-1);
-          console.log("-1");
-          c2=1;
-          poscount=0;
-        neutralcount=0;
-        c3=0;
-        c1=0;
-        }
-        
-
-      }
-
-      if(rEgradArray[l]==0){
-        neutralcount=neutralcount+1;
-        if (neutralcount>1&&c3==0){
-          rElineType.push(0);
-          console.log("0");
-          c3=1;
-           negcount=0;
-        poscount=0;
-        c1=0;
-        c2=0;
-        }
-       
-
-      }
-    
-   }
-
-
-
-  }
-
-
+//initialise the client and shit
 
 
 
 io.sockets.on('connection', function(socket){
   connectedClientSocket = socket;
+  socket.emit('scripts', scripts)
+  socket.emit('applications', applications)
   socket.on('startRecording', function(data){
-    console.log('starting')
     startRecording();
   });
-  socket.on('translate', function(data){
 
+  socket.on('translate', function(data){
     translate();
-     console.log('starting')
+    console.log('starting')
   });
+
+  socket.on('script', function(scriptName){
+    runapplescript(scriptName)
+  });
+
+  ws.onmessage = function(event) {
+    connectedClientSocket.emit("frame", event.data);
+  }
+
+  socket.on('detectMode', function(data) {
+    detectSegments()
+  })
+
+  socket.on('scriptAttribution', function (data) {
+    console.log(data)
+    GesturesObject[GesturesNames[-1]].scriptPath = data['path']
+      console.log('attributed!!')
+      console.log(GesturesObject[GesturesNames[-1]].scriptPath)
+  })
 });
 
 
 
-
- 
-
 // all environments
-app.set('port', process.env.PORT || 8072);
+app.set('port', process.env.PORT || 3000);
 app.set('views', __dirname + '/views');
 app.set('view engine', 'jade');
 app.use(express.favicon());

@@ -6,3 +6,124 @@ body {
 a {
   color: #00B7FF;
 }
+
+.progress {
+	height: 50px;
+	width: 0px;
+	background-color: #800040;
+	z-index: 50;
+	margin: 0 auto;
+}
+
+.progresscontainer {
+	width: 480px;
+	border: 1px solid black;
+	height: 50px;
+	margin: 200px;
+}
+
+.handCircle {
+	border-radius: 50%;
+	width: 100px;
+	height: 100px; 
+	background-color: #004080;
+	position: fixed;
+	z-index: 500;
+}
+
+
+#selectionMode {
+	background-color: #800000;
+	left: 20%;
+}
+
+#createGesture {
+	background-color: #004080;
+	left: 50%;
+}
+
+#gestureMode {
+	background-color: #008040;
+	left: 80%;
+}
+
+
+.gestureText {
+	background-color: transparent;
+	margin-top: 110px;
+	text-align: center;
+	width: 150px;
+	margin-left: -22px;	
+	font-size: 15pt;
+}
+
+.fixedOffsetImportant {
+	border-radius: 50%;
+	width: 100px;
+	height: 100px; 
+	position: fixed;
+	margin-left: -50px;
+}
+
+.selectionModeInterface {
+	width: 100%;
+	height: 100%;
+	top: 0;
+	left: 0;
+	display: none;
+	background-color: #800000;
+	position: absolute;
+}
+
+.selectionModeInterface li ul {
+}
+.selectionModeInterface li{
+	display: inline;
+	margin-left: 200px;
+}
+
+.selectionModeCircle {
+	margin: 100px;
+	border-radius: 50%;
+	width: 100px;
+	height: 100px; 
+	background-color: white;
+
+}
+.selectionModeScriptCircle {
+	margin: 100px;
+	margin-top:300px;
+	border-radius: 50%;
+	width: 100px;
+	height: 100px; 
+	background-color: white;
+	float:left;
+
+}
+
+.circleLabel {
+	text-align: center;
+	margin-top: 100px;
+	color: white;
+}
+
+.timer {
+	font-size: 30pt;
+	position: fixed;
+	width: 50px;
+	height: 50px;
+	top: 50%;
+	left: 50%;
+	margin-left: -25px;
+	z-index: 500;
+
+}
+canvas {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: -1;
+}
+
+
+

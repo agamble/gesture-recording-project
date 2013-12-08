@@ -1,29 +1,380 @@
 extends layout
 
 block content
-	h1= title
-	p Welcome to #{title}
 
-	button.button0 This is a test
-	button.button1  retest
+    div.handCircle
+    div.home
+        div#selectionMode.fixedOffsetImportant
+            p.gestureText Selection Mode
+        div#createGesture.fixedOffsetImportant
+            p.gestureText Record a New Gesture
+        div#gestureMode.fixedOffsetImportant
+            div.circleAnimated
+            p.gestureText Gesture Mode
 
-	script(src='/socket.io/socket.io.js')
-	script(src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js")
-	script(type='text/javascript').
-		var socket = io.connect('http://localhost');
-		$('.button0').click(function(){
-			socket.emit('startRecording', null);
-			setTimeout(function(){
-				socket.emit('stopRecording', null);
-				}, 5000)
-		})
-		socket.on('gesture', function(data){
-			$('body').append('There was another gesture. ')
-			})
-		
-		$('.button1').click(function(){
-			socket.emit('translate', null);
-			})
+    div.gestureMode
 
+    div.recordGestureInterface
+        div.timer
 
-		
+    div.selectionModeInterface
+        li
+
+    div.progress
+
+    script(src='/socket.io/socket.io.js')
+    script(src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js")
+    script(type='text/javascript').
+        
+        var THREEHAND;
+        var SCENE_SIZE = 50, scene, camera, renderer;
+
+        function init() { 
+          scene = new THREE.Scene();
+          var WIDTH = window.innerWidth,
+              HEIGHT = window.innerHeight;
+
+          renderer = new THREE.WebGLRenderer({antialias:true});
+          renderer.setSize(WIDTH, HEIGHT);
+          document.body.appendChild(renderer.domElement);
+        
+          renderer.setClearColor(0xffffff, 1);
+
+            camera = new THREE.PerspectiveCamera(45, (window.innerWidth/window.innerHeight), SCENE_SIZE/1000, SCENE_SIZE);
+
+            camera.position.set(30,20,0);
+            camera.lookAt(new THREE.Vector3(0,0,0));
+            scene.add(camera);
+            
+          window.addEventListener('resize', function() {
+            var WIDTH = window.innerWidth,
+                HEIGHT = window.innerHeight;
+            renderer.setSize(WIDTH, HEIGHT);
+            camera.aspect = WIDTH / HEIGHT;
+            camera.updateProjectionMatrix();
+          });
+            
+          var light = new THREE.PointLight(0xff0000);
+          light.position.set(-100,200,100);
+          scene.add(light);
+          
+              var loader = new THREE.JSONLoader();
+          loader.load( "/javascripts/screenHand.js", function(geometry){
+          var handMaterial = new THREE.MeshNormalMaterial({color: 0xffffff});
+            screenHand = new THREE.Mesh(geometry, handMaterial);
+               screenHand.scale.set( 3, 3, 3 );
+            THREEHAND = screenHand;
+            scene.add(THREEHAND);
+            console.log("HAND DISPLAYED!");
+          }); 
+
+        }
+
+        function animate() {
+          requestAnimationFrame(animate);
+          renderer.render(scene, camera);
+        } 
+
+        function leapToSceneTHREE(leapPosition){
+            var x = 0
+            var y = (((leapPosition[1])-200)/300)*SCENE_SIZE
+            var z = -(leapPosition[0]/300)*SCENE_SIZE
+            var toReturn = new THREE.Vector3(x,y,z)
+            return toReturn
+        }
+
+        var socket = io.connect('http://localhost');
+        $('.button0').click(function(){
+            socket.emit('startRecording', {gestureName: "hello"});
+            setTimeout(function(){
+                socket.emit('stopRecording', null);
+            }, 5000)
+        })
+        socket.on('gesture', function(data){
+            $('body').append('There was another gesture. ')
+        })
+        socket.on('gestureProgress', function(data) {
+            $('.progress').width(data*8);
+        })
+        $('.button1').click(function(){
+            socket.emit('translate', null);
+        })
+
+        var window_width = $(window).width()
+        var window_height = $(window).height();
+
+        var circleAnimated = false;
+        var animateInProgress = false;
+
+        var circlesToWatch = $('.fixedOffsetImportant')
+        var currentLocation = 0;
+        // 0 for home, 1 for selection, 2 for create, 3 for gesture
+
+        var withinScriptCategory;
+
+        var canRunScript = true;
+
+        function resetScript(){
+            canRunScript = false
+            setTimeout(function(){
+                canRunScript = true
+                }, 1000)
+        }
+
+        function setupPage() {
+            $('.circle').each(function(index, element){
+                // store the related colours in divs
+                var colour = $(this).css('background-color')
+                $(this).children(':first').css('background-color', colour);
+                // store their permenant offsets relative to page
+                setupOffsets($(this).children(':first'))
+            })
+        }
+
+        var currentSpace = 0;
+        
+        var count=5;
+        var intersectNeeded = true
+        var counter;
+        var readyToAnimate = false;
+
+        function timer() {
+              count=count-1;
+            if (count == 0) {
+                 clearInterval(counter);
+                $('.recordGestureInterface .timer').html(count)
+                setTimeout(function(){
+                    $('.recordGestureInterface .timer').remove();
+                    socket.emit('startRecording', null)
+                    $('.handCircle').data('gestureName', gesture_name)
+                    }, 1000);
+                 //counter ended, do something here
+                 return;
+            }
+            $('.recordGestureInterface .timer').html(count)
+        }
+
+        function setReadyToAnimate() {
+            setTimeout(function(){
+                readyToAnimate = true;
+                }, 2000)
+        }
+
+        function recordGestureInterface() {
+            currentLocation = 2
+            console.log('called')
+            counter=setInterval(timer, 1000); //1000 will  run it every 1 second
+
+            init()
+            animate()
+            setReadyToAnimate()
+            $('.handCircle').css('z-index', '-500')
+        }
+
+        var shouldChange = true
+
+        function checkForIntersection(pointer, options){
+            if (intersectNeeded) {
+                var center_of_pointer_y = pointer.top
+                 var center_of_pointer_x = pointer.left
+
+                options.each(function(index, element){
+                    var x = center_of_pointer_x - ($(element).offset().left);
+                    var y = center_of_pointer_y - ($(element).offset().top)
+
+                    var withinCircle = (Math.pow(x, 2) + Math.pow(y, 2) < 50*50)
+                    if (withinCircle && currentLocation == 0 && shouldChange) {
+                        hideHome()
+                        shouldChange = false
+                        switch (index) {
+                            case 0:
+                                console.log(index)
+                                shouldChange = false
+                                currentLocation = 1
+                                selectionModeInterface();
+                                break
+                            case 1:
+                                console.log(index)
+                                shouldChange = false
+                                currentLocation = 2
+                                recordGestureInterface();
+                                break
+                            case 2:
+                                console.log(index)
+                                shouldChange = false
+                                currentLocation = 3
+                                gestureModeInterface();
+                                break
+                         }
+                    } else if (withinCircle && currentLocation == 1) {
+                        var script_category = $(element).attr('id');
+                        for (var i in scriptsObject[script_category]) {
+                            $(element).hide()
+                            var this_name = scriptsObject[script_category][i]
+                            var short_name = scriptsObject[script_category][i].split('.')[0]
+                            $('.selectionModeInterface li').append("<ul class='circleContainer'><div id='" + this_name + "' script='it' class=' selectionModeScriptCircle'><div class='circleLabel'>" + short_name + "</div></div></ul>")
+
+                            }
+                        withinScriptCategory = script_category
+                        currentLocation = 1.5;
+                        circlesToWatch = $('.selectionModeScriptCircle')
+                    } else if (withinCircle && currentLocation == 1.5 && canRunScript) {
+                        var this_script = $(element).attr('id')
+                        var path = withinScriptCategory + "/" + this_script
+                        socket.emit('script', path)
+                        resetScript();
+
+                    } else if (withinCircle && currentLocation == 4) {
+                        var this_script = $(element).attr('id')
+                        var path = withinScriptCategory + "/" + this_script
+                        resetScript();
+                        var script_category = $(element).attr('id');
+                        for (var i in scriptsObject[script_category]) {
+                            $(element).hide()
+                            var this_name = scriptsObject[script_category][i]
+                            var short_name = scriptsObject[script_category][i].split('.')[0]
+                            $('.selectionModeInterface li').append("<ul class='circleContainer'><div id='" + this_name + "' script='it' class=' selectionModeScriptCircle'><div class='circleLabel'>" + short_name + "</div></div></ul>")
+
+                            }
+                        $('.handCircle').data("category", script_category)
+                        currentLocation = 4.5;
+                        circlesToWatch = $('div[script="it"]')
+                    } else if (withinCircle && currentLocation == 4.5) {
+                        var this_script = $(element).attr('id')
+                        var script_category = $('.handCircle').data("category")
+                        var path = script_category + "/" + this_script
+                        var nameOfGesture = Math.random().toString()
+
+                        socket.emit('scriptAttribution', {"path": path, "gestureName": nameOfGesture})
+                        resetScript();
+                        $('body').html("<h1> Success! </h1>")
+                    }
+                })
+            }
+        }
+
+        function gestureModeInterface(){
+            currentLocation = 3
+            intersectNeeded = false
+            init()
+            animate()
+            setReadyToAnimate()
+            $('.handCircle').css('z-index', '-500')
+            socket.emit('detectMode', null)
+        }
+
+        function homeInterface(){
+
+        }
+
+        function hideHome() {
+            $('.home').hide()
+        }
+
+        function selectionModeInterface(){
+            currentLocation = 1;
+
+            $('.selectionModeInterface').fadeIn(200, function(){
+                circlesToWatch = $('.selectionModeCircle')
+                var handUpdate = $('.handCircle')
+                handUpdate = $(handUpdate.selector);
+                handUpdate = handUpdate.refresh();
+                });
+            for (var k in scriptsObject) {
+                $(".selectionModeInterface").append("<div class='circleContainer'><div id='" + k + "' class=' selectionModeCircle fixedOffsetImportant'><div class='circleLabel'>" + k + "</div></div></div>");
+            }
+            var handUpdate = $('.handCircle')
+            handUpdate = $(handUpdate.selector);
+            handUpdate = handUpdate.refresh();
+        }
+
+        function animateIntersection(element, index) {
+            element.animate({
+              width: "+=5000",
+              height: "+=5000",
+              top: "-=2500",      // while the edge growth of the circle is  N, 
+              left: "-=2500",     // the center grows at (N/2), 
+            }, 500, function(){
+                circleAnimated = true;
+                animateInProgress = false;
+            });
+        }
+
+        function leapToScene( frame , leapPos ){
+            var iBox = frame.interactionBox;
+            var left = iBox.center[0] - iBox.size[0]/2;
+            var top = iBox.center[1] + iBox.size[1]/2;
+            var x = leapPos[0] - left;
+            var y = leapPos[1] - top;
+            x /= iBox.size[0];
+            y /= iBox.size[1];
+            x *= window_width;
+            y *= window_height;
+            return [ x , -y - 200 ];
+        }
+
+        var pointerPos;
+        var scriptsObject;
+        var applicationsArray;
+
+        socket.on('scripts', function(scripts) {
+            scriptsObject = scripts
+            console.log(scripts)
+            })
+
+        socket.on('applications', function(applications) {
+            applicationsArray = applications;
+            })
+
+        $.fn.refresh = function() {
+            return $(this.selector);
+        };
+
+        //- setInterval(function(){
+        //-     $( ".fixedOffsetImportant").trigger( "check", [ "Custom", "Event" ] );
+        //-     }, 1000)
+
+        socket.on('matchSuccess', function (data) {
+            console.log(data)
+            })
+
+        socket.on('finishedRecording', function (gestureName) {
+            setViewToChooseScript(gestureName)
+            })
+
+        function setViewToChooseScript(gestureName) {
+            setTimeout(function(){
+                currentLocation = 4
+                }, 1000)
+
+            intersectNeeded = true;
+
+            $('canvas').remove();
+            selectionModeInterface();
+            $('.handCircle').css('z-index', '500');
+            $('.handCircle').data('gestureName', gestureName);
+        }
+
+        socket.on('frame', function(frame){
+            frame = JSON.parse(frame)
+            if ((currentLocation == 2 || currentLocation == 3) && readyToAnimate) {
+                if(frame.hands.length > 0){
+                    THREEHAND.position = leapToSceneTHREE(frame.hands[0].palmPosition);
+                } else{
+                    THREEHAND.position.set = (new THREE.Vector3(0,0,0))
+                }
+            }
+            for( var i=0; i < frame.hands.length; i++ ){
+                var hand = frame.hands[i];
+                if (i==0) {
+                    var coords = leapToScene(frame, hand.palmPosition);
+                    pointerPos = $('.handCircle').css('top', coords[1]).css('left', coords[0]).offset();
+                    var intersectable = $(circlesToWatch)
+                    intersectable = $(intersectable.selector);
+                    intersectable = intersectable.refresh();
+                    checkForIntersection(pointerPos, intersectable)
+                }
+            }
+        })
+        
+        setupPage();
